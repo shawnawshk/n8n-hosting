@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      initContainers:
+      - name: volume-permissions
+        image: busybox:1.36
+        command: ["sh", "-c", "chown 1000:1000 /data"]
+        volumeMounts:
+        - name: n8n-storage
+          mountPath: /data
+      - name: wait-for-postgres
+        image: {{ .Values.postgres.image }}
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres -p 5432 -U $POSTGRES_USER; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+        envFrom:
+        - secretRef:
+            name: postgres-credentials
+        envFrom:
+        - secretRef:
+            name: postgres-credentials
+      containers:
+      - name: n8n
+        image: {{ .Values.n8n.image }}
+        env:
+        - name: DB_TYPE
+          value: postgresdb
+        - name: DB_POSTGRESDB_HOST
+          value: postgres
+        - name: DB_POSTGRESDB_PORT
+          value: "5432"
+        - name: DB_POSTGRESDB_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_DB
+        - name: DB_POSTGRESDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_NON_ROOT_USER
+        - name: DB_POSTGRESDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_NON_ROOT_PASSWORD
+        ports:
+        - containerPort: 5678
+        resources:
+          requests:
+            memory: {{ .Values.n8n.resources.memory }}
+          limits:
+            memory: {{ .Values.n8n.resources.memory }}
+        volumeMounts:
+        - name: n8n-storage
+          mountPath: /home/node/.n8n
+      volumes:
+      - name: n8n-storage
+        persistentVolumeClaim:
+          claimName: n8n-storage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: n8n
+  ports:
+  - port: {{ .Values.n8n.service.port }}
+    targetPort: 5678
+  type: {{ .Values.n8n.service.type }}

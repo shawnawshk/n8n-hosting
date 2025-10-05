@@ -1,0 +1,23 @@
+postgres:
+  image: postgres:16
+  credentials:
+    user: adminUser
+    password: adminPassword
+    database: n8n
+    nonRootUser: nonrootuser
+    nonRootPassword: nonRootPassword
+  resources:
+    cpu: 500m
+    memory: 256Mi
+  storage:
+    size: 300Gi
+
+n8n:
+  image: docker.n8n.io/n8nio/n8n
+  resources:
+    memory: 500Mi
+  storage:
+    size: 5Gi
+  service:
+    type: ClusterIP
+    port: 5678
